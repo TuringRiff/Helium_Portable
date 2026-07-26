@@ -1,8 +1,17 @@
+<div align="center">
+
 # Helium 便携版
 
 全自动构建的 [Helium](https://github.com/imputnet/helium) Windows x64 便携版，集成 Chrome++ 便携化组件。
 
-[![build status](https://github.com/Piracola/Helium_Portable/actions/workflows/build.yml/badge.svg)](https://github.com/Piracola/Helium_Portable/actions/workflows/build.yml)
+[![最新版本][badge-release]][link-release]
+[![总下载量][badge-downloads]][link-release]
+[![构建状态][badge-build]][link-actions]
+[![许可证][badge-license]][link-license]
+
+**[⬇ 下载最新版本][link-release]**
+
+</div>
 
 > 想了解构建系统或新增浏览器？见 [ChromiumPortable](https://github.com/Piracola/ChromiumPortable)——本仓库仅是其构建配置之一。
 
@@ -70,3 +79,24 @@ python -m portable_builder --config browser.json --target helium_prerelease --wo
 ## 许可证
 
 本仓库构建脚本遵循 MIT 许可证。Helium、Chromium 与 Chrome++ 的版权归各自项目所有。
+
+---
+
+<div align="center">
+
+<sub>Built and maintained by</sub>
+
+**Piracola**
+
+</div>
+
+<!-- 徽标定义：中文标签需 percent-encode，否则 shields.io 无法解析。 -->
+<!-- 修改标签文字时请一并更新编码，例如 最新版本 -> %E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC -->
+[badge-release]: https://img.shields.io/github/v/release/Piracola/Helium_Portable?display_name=tag&style=flat-square&color=5b5bd6&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC
+[badge-downloads]: https://img.shields.io/github/downloads/Piracola/Helium_Portable/total?style=flat-square&color=2ea043&label=%E6%80%BB%E4%B8%8B%E8%BD%BD%E9%87%8F
+[badge-build]: https://img.shields.io/github/actions/workflow/status/Piracola/Helium_Portable/build.yml?branch=main&style=flat-square&label=%E6%9E%84%E5%BB%BA%E7%8A%B6%E6%80%81
+[badge-license]: https://img.shields.io/github/license/Piracola/Helium_Portable?style=flat-square&color=6e7681&label=%E8%AE%B8%E5%8F%AF%E8%AF%81
+
+[link-release]: https://github.com/Piracola/Helium_Portable/releases/latest
+[link-actions]: https://github.com/Piracola/Helium_Portable/actions/workflows/build.yml
+[link-license]: https://github.com/Piracola/Helium_Portable/blob/main/LICENSE
