@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -63,10 +64,31 @@ def find_asset(release, arch):
     raise RuntimeError(f"No Helium {arch} Windows zip asset found in release {release.get('tag_name')}.")
 
 
-def download_file(url, path, verify_ssl=True):
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def expected_hex_digest(value):
+    """GitHub reports release asset digests as 'sha256:<hex>'."""
+    if not value:
+        return None
+    text = str(value).strip()
+    return text.split(":", 1)[1].strip().lower() if ":" in text else text.lower()
+
+
+def download_file(url, path, verify_ssl=True, sha256=None):
     path = Path(path)
+    expected = expected_hex_digest(sha256)
+
     if path.exists():
-        return path
+        if not expected or sha256_file(path) == expected:
+            return path
+        print(f"[WARN] Cached {path.name} failed its digest check; downloading again.", file=sys.stderr)
+        remove_path(path)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     with requests.get(url, stream=True, verify=verify_ssl, headers=github_headers(), timeout=120) as response:
@@ -75,6 +97,13 @@ def download_file(url, path, verify_ssl=True):
             for chunk in response.iter_content(chunk_size=1024 * 1024):
                 if chunk:
                     file.write(chunk)
+
+    if expected:
+        actual = sha256_file(path)
+        if actual != expected:
+            remove_path(path)
+            raise RuntimeError(f"SHA256 mismatch for {path.name}: expected {expected}, got {actual}")
+
     return path
 
 
@@ -135,7 +164,7 @@ def prepare_builder_archive(asset, version, arch, workdir):
         return builder_archive
 
     source_zip = downloads_dir / asset["name"]
-    download_file(asset["browser_download_url"], source_zip)
+    download_file(asset["browser_download_url"], source_zip, sha256=asset.get("digest"))
     stage_dir = downloads_dir / f"helium_{version}_{arch}_builder_stage"
     remove_path(stage_dir)
     stage_dir.mkdir(parents=True, exist_ok=True)
@@ -196,16 +225,29 @@ def main():
     version = tag_version or asset_version
     extract_inner = args.extract_inner or os.getenv("HELIUM_EXTRACT_INNER", "").lower() in ("1", "true", "yes")
 
+    if not asset.get("digest"):
+        raise RuntimeError(
+            f"Release asset {asset.get('name')} has no digest; refusing to publish an unverifiable download."
+        )
+
     result = {
         "version": version,
         "verify_ssl": True
     }
 
     if extract_inner:
-        result["installer_path"] = str(prepare_builder_archive(asset, version, args.arch, Path.cwd()))
+        # The upstream zip is verified against the release digest inside
+        # prepare_builder_archive; report the digest of the repacked archive we
+        # actually hand to the builder so the handoff is checked too.
+        builder_archive = prepare_builder_archive(asset, version, args.arch, Path.cwd())
+        result["installer_path"] = str(builder_archive)
+        result["sha256"] = sha256_file(builder_archive)
+        result["size"] = builder_archive.stat().st_size
     else:
         result["url"] = asset["browser_download_url"]
         result["file_name"] = asset["name"]
+        result["sha256"] = expected_hex_digest(asset["digest"])
+        result["size"] = asset.get("size")
 
     print(json.dumps(result))
 

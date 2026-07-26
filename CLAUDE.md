@@ -27,22 +27,27 @@ python -m portable_builder --config browser.json --target helium_stable,helium_p
 # Build and archive any updated targets
 python -m portable_builder --config browser.json --target helium_stable,helium_prerelease --workdir . build-targets
 
+# Verify the finished archives (extract, check the import table, launch the browser)
+python -m portable_builder --config browser.json --target helium_stable,helium_prerelease --workdir . verify-targets
+
 # Render release metadata for the shared release
 python -m portable_builder --config browser.json --target helium_stable,helium_prerelease --workdir . render-release-targets
 ```
 
+`verify-targets` skips targets whose `{PREFIX}_UPDATE` env var is `false`, so after a local single-target build use `verify` instead. It needs no `HELIUM_EXTRACT_INNER`.
+
 ## Key Files
 
 - **`browser.json`** — Build target config. It defines `helium_stable` and `helium_prerelease`, both using the same packaging layout, and a shared top-level `release` section so one GitHub Release carries both assets. The stable target controls the release tag/title. Asset matching is intentionally inferred from each target's `archive_name`, so stable/preview cleanup stays isolated.
-- **`scripts/helium_package.py`** — The script provider. Queries `imputnet/helium-windows` releases, selects either the latest stable or latest prerelease based on `--channel`, finds the x64 zip asset, and either returns its URL or (with `--extract-inner` / `HELIUM_EXTRACT_INNER`) restructures the zip into a builder-compatible 7z archive. Key behavior: `chrome.exe` goes to `Helium-bin/chrome.exe`, everything else to `Helium-bin/<chromium_version>/...`.
-- **`chrome++/chrome++.ini`** — Chrome++ config with `data_dir=%app%\Data` and `cache_dir=%app%\Cache` (relative to chrome.exe's directory, since `ini_location` is `app_root`).
-- **`chrome++/injectpe.bat`** — Manual DLL injection script (targets `helium.exe`; the automated builder uses `setdll` directly).
+- **`scripts/helium_package.py`** — The script provider. Queries `imputnet/helium-windows` releases, selects either the latest stable or latest prerelease based on `--channel`, finds the x64 zip asset, and either returns its URL or (with `--extract-inner` / `HELIUM_EXTRACT_INNER`) restructures the zip into a builder-compatible 7z archive. Key behavior: `chrome.exe` goes to `Helium-bin/chrome.exe`, everything else to `Helium-bin/<chromium_version>/...`. It refuses to emit a result unless the GitHub release asset carries a `digest`, verifies the downloaded zip against it, and reports a `sha256` for whatever it hands the builder (the repacked archive in extract-inner mode, the upstream digest otherwise).
+- **`chrome++/chrome++.override.ini`** — Only this browser's deviations from the shared baseline; currently just `command_line=--disable-features=LockProfileCookieDatabase`. The builder merges core's `setdll/chrome++.ini` (upstream baseline) → `setdll/chrome++.defaults.ini` (project-wide defaults) → this file. The effective `data_dir` is `%app%\..\Data` from the baseline: `%app%` is chrome.exe's directory (`Helium/`), so the profile lands one level up, next to the `Helium` folder in the extracted archive. See *chrome++.ini layering* in the workspace `CLAUDE.md`.
+- **`chrome++/injectpe.bat`** — Manual DLL injection helper, unused by the automated build (which calls `setdll` directly). It still targets `helium.exe`, a name upstream no longer ships — the executable is `chrome.exe`.
 - **`开始.bat`** — Creates a desktop shortcut pointing to `Helium\chrome.exe` with `--disable-background-networking` flag.
 
 ## Helium-Specific Build Details
 
 - The upstream zip from `imputnet/helium-windows` contains a single root directory with `chrome.exe` at root and versioned files beside it. `helium_package.py` restructures this into `Helium-bin/chrome.exe` + `Helium-bin/<version>/...` to match the builder's expected `version_root` layout.
-- The builder's `inject_dll` stage uses `setdll` to inject `version.dll` into `chrome.exe` with a portable relative path. Since `version_dll_location` is `app_root`, the DLL lands next to chrome.exe (not in the version subdirectory).
+- The builder's `inject_dll` stage uses `setdll` to inject `version.dll` into `chrome.exe` with a portable relative path. Since `version_dll_location` is `app_root`, the DLL lands next to chrome.exe (not in the version subdirectory). Injection is asserted by parsing the PE import table and requiring `version.dll` to be the *first* import — Chromium natively imports the system `VERSION.dll`, so a weaker check would pass even with no injection at all.
 - `exe_name` is `..\\chrome.exe` (relative path from the version subdirectory back to the app root).
 - New GitHub Releases are still keyed to the stable version tag. If only the upstream prerelease changes, the workflow updates the existing latest release body and replaces only the preview asset.
 - When a new stable tag creates a new shared release but preview has not changed, the builder now carries forward the existing preview archive so the shared release keeps both assets.
