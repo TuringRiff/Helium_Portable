@@ -66,11 +66,11 @@ Helium Windows 自带的 WinSparkle 更新器会把官方安装器安装到
 
 1. 先关闭所有 Helium 窗口。
 2. 在 Windows「设置 > 应用 > 已安装的应用」中卸载 Helium。
-3. 保持仓库中的 `清理Helium安装版注册表.bat` 与 `scripts\cleanup_helium_registry.ps1` 相对位置不变，双击前者并允许管理员权限。脚本只清理 Helium 的默认应用注册与关联，不会删除浏览器文件、用户数据或注册便携版。
+3. 下载并双击 `清理Helium安装版注册表.bat`，然后允许管理员权限。它是一个完整的单文件工具，只清理 Helium 的默认应用注册与关联，不会删除浏览器文件、用户数据或注册便携版。
 4. 如果卸载后 `%LOCALAPPDATA%\imput\Helium\Application` 仍存在，确认里面没有需要的数据后再删除 `Helium` 文件夹。
 5. 启动 Helium 便携版，在浏览器内部点击“设为默认浏览器”。
 
-清理前，脚本会把涉及的注册表项备份到 `%LOCALAPPDATA%\HeliumPortable\RegistryBackups`。如需只查看计划清理的项目，可在命令行运行 `清理Helium安装版注册表.bat --dry-run`，演练模式不会修改注册表。
+清理前，脚本会把涉及的注册表项备份到 `%LOCALAPPDATA%\HeliumPortable\RegistryBackups`。它不依赖同目录下的其他文件，可以单独下载到任意位置运行。如需只查看计划清理的项目，可在命令行运行 `清理Helium安装版注册表.bat --dry-run`，演练模式不会修改注册表。
 
 2026-07-28 之后构建的便携版会在 Chrome++ 层和快捷方式层同时把整体更新清单指向保留的无效域名，从而阻断安装器下载。
 旧版用户可在 `Helium\chrome++.ini` 的 `command_line=` 末尾追加：
