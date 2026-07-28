@@ -35,6 +35,8 @@
   - 新建前台标签页打开地址栏内容或书签
   - 免验证系统登录密码即可查看已保存密码
   - 支持右键关闭标签、老板键、翻译快捷键、按键映射、启动/退出钩子等扩展（默认未启用，详见 `chrome++.ini`）
+- 阻断 Helium Windows 的整体自动更新，防止官方安装器在 C 盘创建另一份 Helium；安全组件更新不受影响
+- 关闭默认浏览器检查，便携版不会主动要求修改系统默认应用
 - 跟随 Helium Windows x64 正式版自动检查和发布
 - 同一个 GitHub Release 同时提供正式版便携包和最新预发行版便携包
 - 当正式版创建新 release 而预发行版未更新时，会自动沿用上一版 preview 压缩包，保持同一个 release 下两个包都可下载
@@ -55,6 +57,27 @@
 **卸载**
 
 删除 `Helium` 文件夹即可完成卸载（便携，不写注册表）。
+
+### C 盘已出现 Helium 安装版
+
+Helium Windows 自带的 WinSparkle 更新器会把官方安装器安装到
+`%LOCALAPPDATA%\imput\Helium\Application`。安装版和便携版使用同一组浏览器注册名，
+所以安装过程会把原本指向便携版的默认浏览器路径覆盖成 C 盘路径。
+
+1. 先关闭所有 Helium 窗口。
+2. 在 Windows「设置 > 应用 > 已安装的应用」中卸载 Helium。
+3. 保持仓库中的 `清理Helium安装版注册表.bat` 与 `scripts\cleanup_helium_registry.ps1` 相对位置不变，双击前者并允许管理员权限。脚本只清理 Helium 的默认应用注册与关联，不会删除浏览器文件、用户数据或注册便携版。
+4. 如果卸载后 `%LOCALAPPDATA%\imput\Helium\Application` 仍存在，确认里面没有需要的数据后再删除 `Helium` 文件夹。
+5. 启动 Helium 便携版，在浏览器内部点击“设为默认浏览器”。
+
+清理前，脚本会把涉及的注册表项备份到 `%LOCALAPPDATA%\HeliumPortable\RegistryBackups`。如需只查看计划清理的项目，可在命令行运行 `清理Helium安装版注册表.bat --dry-run`，演练模式不会修改注册表。
+
+2026-07-28 之后构建的便携版会在 Chrome++ 层和快捷方式层同时把整体更新清单指向保留的无效域名，从而阻断安装器下载。
+旧版用户可在 `Helium\chrome++.ini` 的 `command_line=` 末尾追加：
+
+```text
+--custom-update-server-url=https://updates.invalid/ --no-default-browser-check
+```
 
 **本地构建**（Windows + Python 3，需将 `ChromiumPortable` 检出到同级目录）
 
