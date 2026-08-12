@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       builder_ref:
-        description: ChromiumPortable ref to use.
+        description: ChromiumPortable ref to build with. Empty uses the pinned commit.
         required: false
-        default: main
+        default: ""
   # A full run downloads, repacks, injects and smoke-launches the browser, so
   # documentation-only commits are excluded rather than paying for a Windows runner.
   push:
@@ -17,6 +17,13 @@ on:
     paths-ignore: [ "**.md", "LICENSE", ".gitignore", ".gitattributes" ]
   schedule:
     - cron: "0 9 * * *"
+
+# ChromiumPortable publishes no releases and scripts/release.py imports its internals
+# (build_context, archive_name_regex, is_upgrade, ...), so tracking main would let an
+# upstream refactor break the nightly run with nothing changing on this side. Bump
+# deliberately, after checking that those imports still resolve.
+env:
+  BUILDER_REF: ce202ca2270304abb167b436f975e0ac768b4a37 # main as of 2026-08-13
 
 jobs:
   # Version discovery is pure HTTP and needs no Windows, so the Windows runner
@@ -30,17 +37,17 @@ jobs:
       env_json: ${{ steps.check.outputs.env_json }}
     steps:
       - name: Checkout Helium repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Checkout portable builder
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Piracola/ChromiumPortable
-          ref: ${{ github.event.inputs.builder_ref || 'main' }}
+          ref: ${{ github.event.inputs.builder_ref || env.BUILDER_REF }}
           path: _portable_builder
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
@@ -79,17 +86,17 @@ jobs:
       contents: write
     steps:
       - name: Checkout Helium repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Checkout portable builder
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Piracola/ChromiumPortable
-          ref: ${{ github.event.inputs.builder_ref || 'main' }}
+          ref: ${{ github.event.inputs.builder_ref || env.BUILDER_REF }}
           path: _portable_builder
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
@@ -134,8 +141,11 @@ jobs:
           PYTHONPATH: _portable_builder
         run: python -m portable_builder --config browser.json --target helium_stable --workdir . verify
 
+      # A published release already carries this exact archive, so keep the artifact
+      # only for the runs that will not publish one.
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request' || env.UPDATE_NEEDED != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: Helium-Portable-Build
           path: build/assets/*.7z
