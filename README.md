@@ -46,7 +46,7 @@
 
 1. 访问 [Releases](https://github.com/Piracola/Helium_Portable/releases/latest) 下载最新压缩包。
 2. 解压到任意目录。
-3. 运行 `开始.bat` 创建桌面快捷方式，或直接启动 `Helium\chrome.exe`。
+3. 运行 `开始.bat` 在解压目录内生成 `Helium.lnk` 快捷方式，或直接启动 `Helium\chrome.exe`。
 
 **更新**
 
@@ -90,7 +90,7 @@ python -m portable_builder --config browser.json --target helium_stable --workdi
 python -m portable_builder --config browser.json --target helium_stable --workdir . verify
 ```
 
-发布阶段由 `scripts/publish_release.py` 完成（CI 中运行）：每个新版本创建一个独立的 GitHub Release（tag 为 `v版本号`）并上传压缩包；同一版本重新构建时会原地更新该 release。
+版本检查与发布都由 `scripts/release.py` 完成（CI 中运行）。`check` 直接查询 tag `v版本号` 对应的 release 是否已存在且带有压缩包，以此决定要不要构建；`publish` 先以草稿创建 release，压缩包上传完成后才转为正式发布，因此不会出现能看到却下载不到的 release。同一版本重新构建时会原地更新该 release。
 
 ## 致谢
 

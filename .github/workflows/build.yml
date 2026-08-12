@@ -7,10 +7,14 @@ on:
         description: ChromiumPortable ref to use.
         required: false
         default: main
+  # A full run downloads, repacks, injects and smoke-launches the browser, so
+  # documentation-only commits are excluded rather than paying for a Windows runner.
   push:
     branches: [ main ]
+    paths-ignore: [ "**.md", "LICENSE", ".gitignore", ".gitattributes" ]
   pull_request:
     branches: [ main ]
+    paths-ignore: [ "**.md", "LICENSE", ".gitignore", ".gitattributes" ]
   schedule:
     - cron: "0 9 * * *"
 
@@ -51,15 +55,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PYTHONPATH: _portable_builder
-        run: python -m portable_builder --config browser.json --target helium_stable --workdir . check
+        run: python scripts/release.py --config browser.json --target helium_stable --workdir . check
 
       - name: Summarize
         shell: bash
         run: |
-          echo "UPDATE_NEEDED=${{ steps.check.outputs.UPDATE_NEEDED }}"
-          echo "UPSTREAM_VERSION=${{ steps.check.outputs.UPSTREAM_VERSION }}"
-          echo "CREATE_NEW_RELEASE=${{ steps.check.outputs.CREATE_NEW_RELEASE }}"
-          echo "RELEASE_TAG=${{ steps.check.outputs.RELEASE_TAG }}"
+          {
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Upstream version | ${{ steps.check.outputs.UPSTREAM_VERSION }} |"
+            echo "| Release tag | ${{ steps.check.outputs.RELEASE_TAG }} |"
+            echo "| Build needed | ${{ steps.check.outputs.UPDATE_NEEDED }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   build:
     needs: check
@@ -135,7 +142,8 @@ jobs:
           retention-days: 15
 
       - name: Publish release
-        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'push') && env.UPDATE_NEEDED == 'true'
+        if: github.event_name != 'pull_request' && env.UPDATE_NEEDED == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/publish_release.py --config browser.json --target helium_stable
+          PYTHONPATH: _portable_builder
+        run: python scripts/release.py --config browser.json --target helium_stable --workdir . publish
