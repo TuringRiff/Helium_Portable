@@ -261,7 +261,9 @@ def write_sha256_sidecar(archive):
         )
 
     path = archive.with_name(archive.name + ".sha256")
-    path.write_text(f"{digest}  {archive.name}\n", encoding="ascii")
+    # newline="\n": on Windows the default text mode emits CRLF, and `sha256sum -c`
+    # then looks for a file whose name ends in a carriage return.
+    path.write_text(f"{digest}  {archive.name}\n", encoding="ascii", newline="\n")
     return path
 
 
