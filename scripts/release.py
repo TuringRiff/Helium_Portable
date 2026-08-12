@@ -22,6 +22,7 @@ longer mistaken for "already published" because some newer release sits on top.
 
 import argparse
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -36,7 +37,7 @@ try:
     from portable_builder.config import get_target, load_config
     from portable_builder.github_env import write_env
     from portable_builder.release import archive_name_regex
-    from portable_builder.tools import configure_stdout
+    from portable_builder.tools import configure_stdout, sha256_file
     from portable_builder.versions import is_upgrade
 except ImportError as exc:
     raise SystemExit(
@@ -53,6 +54,8 @@ UPLOAD_ATTEMPTS = 3
 # between `check` and `publish`, and a rebuild of the same Helium version would
 # land on a second tag instead of updating the first.
 TAG_FIELDS = ("target", "name", "display_name", "output_dir", "package_version", "arch")
+
+DATED_SUFFIX = re.compile(r"_\d{4}-\d{2}-\d{2}(?=\.[^.]+$)")
 
 
 def api_headers(require_token=True):
@@ -145,6 +148,17 @@ def matching_asset_names(release, pattern):
     ]
 
 
+def get_release(repo, release_id):
+    """Fetch by id, which — unlike the tag lookup — also works for drafts."""
+    response = requests.get(
+        f"{API_ROOT}/repos/{repo}/releases/{release_id}",
+        headers=api_headers(),
+        timeout=60,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 def delete_asset(repo, asset_id):
     response = requests.delete(
         f"{API_ROOT}/repos/{repo}/releases/assets/{asset_id}",
@@ -190,24 +204,31 @@ def create_draft_release(repo, tag, title, body):
     return response.json()
 
 
-def upload_archive(repo, release, archive):
-    # GitHub rejects a duplicate asset name, so a same-day rebuild has to drop the
-    # previous copy first.
-    for asset in release.get("assets", []):
-        if asset.get("name") == archive.name:
-            print(f"[INFO] Replacing existing asset: {archive.name}")
+def discard_asset_named(repo, release_id, name):
+    """Drop a same-named asset, whatever state the release is in."""
+    for asset in get_release(repo, release_id).get("assets", []):
+        if asset.get("name") == name:
             delete_asset(repo, asset["id"])
 
-    url = f"{UPLOAD_ROOT}/repos/{repo}/releases/{release['id']}/assets?name={quote(archive.name, safe='')}"
+
+def upload_asset(repo, release, path):
+    # GitHub rejects a duplicate asset name, so a rebuild of the same version has
+    # to drop the previous copy first.
+    for asset in release.get("assets", []):
+        if asset.get("name") == path.name:
+            print(f"[INFO] Replacing existing asset: {path.name}")
+            delete_asset(repo, asset["id"])
+
+    url = f"{UPLOAD_ROOT}/repos/{repo}/releases/{release['id']}/assets?name={quote(path.name, safe='')}"
     headers = {**api_headers(), "Content-Type": "application/octet-stream"}
     failure = None
 
     for attempt in range(1, UPLOAD_ATTEMPTS + 1):
         try:
-            with archive.open("rb") as file:
+            with path.open("rb") as file:
                 response = requests.post(url, data=file, headers=headers, timeout=1800)
             if response.status_code in (200, 201):
-                print(f"[INFO] Uploaded {archive.name} on attempt {attempt}.")
+                print(f"[INFO] Uploaded {path.name} on attempt {attempt}.")
                 return response.json()
             failure = f"{response.status_code} {response.text}"
         except requests.RequestException as exc:
@@ -217,20 +238,51 @@ def upload_archive(repo, release, archive):
             delay = 5 * attempt
             print(f"[WARN] Upload attempt {attempt} failed ({failure}); retrying in {delay}s.")
             time.sleep(delay)
-            # A timeout can still have landed the asset server-side; clear it so the
+            # A timed-out upload can still have landed server-side; clear it so the
             # retry does not collide with a half-written copy of itself.
-            current = get_release_by_tag(repo, release["tag_name"]) or {}
-            for asset in current.get("assets", []):
-                if asset.get("name") == archive.name:
-                    delete_asset(repo, asset["id"])
+            discard_asset_named(repo, release["id"], path.name)
 
-    raise SystemExit(f"Failed to upload {archive.name} after {UPLOAD_ATTEMPTS} attempts: {failure}")
+    raise SystemExit(f"Failed to upload {path.name} after {UPLOAD_ATTEMPTS} attempts: {failure}")
 
 
-def prune_superseded_assets(repo, release, pattern, keep_name):
+def write_sha256_sidecar(archive):
+    """Emit `<hash>  <filename>`, the format `sha256sum -c` expects.
+
+    Scoop's autoupdate matches exactly this with a built-in regex, so a manifest
+    only needs `"hash": {"url": "$url.sha256"}` — no custom pattern, and the
+    bucket's excavator never has to download the archive just to learn its digest.
+    """
+    digest = sha256_file(archive)
+    recorded = (os.getenv("ARCHIVE_SHA256") or "").lower()
+    if recorded and recorded != digest:
+        raise SystemExit(
+            f"{archive.name} hashes to {digest} but the archive stage recorded {recorded}; "
+            "the release notes and the sidecar would contradict each other."
+        )
+
+    path = archive.with_name(archive.name + ".sha256")
+    path.write_text(f"{digest}  {archive.name}\n", encoding="ascii")
+    return path
+
+
+def is_superseded_asset(name, pattern):
+    """Whether `name` is an archive this target produced, under any naming it has used.
+
+    The archive used to be `Helium_<version>_<date>.7z`; the date was dropped so a
+    Scoop manifest could derive the URL from the version alone. Stripping a dated
+    suffix before matching keeps those older files sweepable — otherwise they would
+    sit in their releases forever, since the current pattern no longer matches them.
+    Names that only look dated (`Helium_Preview_...`) still fail the version-shaped
+    pattern underneath, so unrelated assets are left alone.
+    """
+    base = name[: -len(".sha256")] if name.endswith(".sha256") else name
+    return bool(pattern.fullmatch(base) or pattern.fullmatch(DATED_SUFFIX.sub("", base)))
+
+
+def prune_superseded_assets(repo, release, pattern, keep_names):
     for asset in release.get("assets", []):
         name = asset.get("name", "")
-        if name != keep_name and pattern.fullmatch(name):
+        if name not in keep_names and is_superseded_asset(name, pattern):
             print(f"[INFO] Removing superseded asset: {name}")
             delete_asset(repo, asset["id"])
 
@@ -341,6 +393,7 @@ def command_publish(target, workdir):
 
     pattern = archive_name_regex(target)
     archive = find_archive(workdir, target, pattern)
+    sidecar = write_sha256_sidecar(archive)
 
     print(f"[INFO] Publishing {tag} ({title})")
     print(f"[INFO] Archive: {archive.name} ({archive.stat().st_size} bytes)")
@@ -349,15 +402,16 @@ def command_publish(target, workdir):
     if release:
         state = "draft" if release.get("draft") else "published"
         print(f"[INFO] Reusing the existing {state} release for {tag}.")
-        patch_release(repo, release["id"], {"name": title, "body": body})
+        release = patch_release(repo, release["id"], {"name": title, "body": body})
     else:
         # Publish only once the archive is attached, so the tag never points at a
         # release users can see but cannot download from.
         release = create_draft_release(repo, tag, title, body)
         print(f"[INFO] Created draft release {tag}.")
 
-    upload_archive(repo, release, archive)
-    prune_superseded_assets(repo, release, pattern, archive.name)
+    upload_asset(repo, release, archive)
+    upload_asset(repo, release, sidecar)
+    prune_superseded_assets(repo, release, pattern, {archive.name, sidecar.name})
 
     if release.get("draft"):
         payload = {"draft": False}
@@ -367,7 +421,7 @@ def command_publish(target, workdir):
             print("[INFO] A newer release already exists; leaving the latest badge alone.")
         patch_release(repo, release["id"], payload)
 
-    print(f"[INFO] Published {tag} with {archive.name}.")
+    print(f"[INFO] Published {tag} with {archive.name} and {sidecar.name}.")
 
 
 def main():
