@@ -13,6 +13,8 @@
 
 </div>
 
+> 本仓库是 [Piracola/Helium_Portable](https://github.com/Piracola/Helium_Portable) 的个人自用 fork，按自身需求调整了构建与发布流程，构建产物发布在本仓库的 Releases。
+>
 > 想了解构建系统或新增浏览器？见 [ChromiumPortable](https://github.com/Piracola/ChromiumPortable)——本仓库仅是其构建配置之一。
 
 ## 仓库导航
@@ -45,7 +47,7 @@
 
 **安装**
 
-1. 访问 [Releases](https://github.com/Piracola/Helium_Portable/releases/latest) 下载最新压缩包。
+1. 访问 [Releases](https://github.com/TuringRiff/Helium_Portable/releases/latest) 下载最新压缩包。
 2. 解压到任意目录。
 3. 运行 `开始.bat` 在解压目录内生成 `Helium.lnk` 快捷方式，或直接启动 `Helium\chrome.exe`。
 
@@ -101,6 +103,7 @@ python -m portable_builder --config browser.json --target helium_stable --workdi
 | [imputnet/helium-windows](https://github.com/imputnet/helium-windows) | Helium Windows 构建发布 |
 | [Bush2021/chrome_plus](https://github.com/Bush2021/chrome_plus) | Chrome++ 便携化组件 |
 | [Piracola/ChromiumPortable](https://github.com/Piracola/ChromiumPortable) | 通用便携版构建核心 |
+| [Piracola/Helium_Portable](https://github.com/Piracola/Helium_Portable) | 本仓库的 fork 来源 |
 
 ## 许可证
 
@@ -110,20 +113,20 @@ python -m portable_builder --config browser.json --target helium_stable --workdi
 
 <div align="center">
 
-<sub>Built and maintained by</sub>
+<sub>原项目由 <b>Piracola</b> 构建与维护 · <a href="https://github.com/Piracola/Helium_Portable">Piracola/Helium_Portable</a></sub>
 
-**Piracola**
+<sub>本 fork 由 <b>TuringRiff</b> 自用维护</sub>
 
 </div>
 
 <!-- 徽标定义：中文标签需 percent-encode，否则 shields.io 无法解析。 -->
 <!-- 修改标签文字时请一并更新编码，例如 最新版本 -> %E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC -->
-[badge-release]: https://img.shields.io/github/v/release/Piracola/Helium_Portable?display_name=tag&style=flat-square&color=5b5bd6&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC
-[badge-downloads]: https://img.shields.io/github/downloads/Piracola/Helium_Portable/total?style=flat-square&color=2ea043&label=%E6%80%BB%E4%B8%8B%E8%BD%BD%E9%87%8F
-[badge-build]: https://img.shields.io/github/actions/workflow/status/Piracola/Helium_Portable/build.yml?branch=main&style=flat-square&label=%E6%9E%84%E5%BB%BA%E7%8A%B6%E6%80%81
-[badge-license]: https://img.shields.io/github/license/Piracola/Helium_Portable?style=flat-square&color=6e7681&label=%E8%AE%B8%E5%8F%AF%E8%AF%81
+[badge-release]: https://img.shields.io/github/v/release/TuringRiff/Helium_Portable?display_name=tag&style=flat-square&color=5b5bd6&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC
+[badge-downloads]: https://img.shields.io/github/downloads/TuringRiff/Helium_Portable/total?style=flat-square&color=2ea043&label=%E6%80%BB%E4%B8%8B%E8%BD%BD%E9%87%8F
+[badge-build]: https://img.shields.io/github/actions/workflow/status/TuringRiff/Helium_Portable/build.yml?branch=main&style=flat-square&label=%E6%9E%84%E5%BB%BA%E7%8A%B6%E6%80%81
+[badge-license]: https://img.shields.io/github/license/TuringRiff/Helium_Portable?style=flat-square&color=6e7681&label=%E8%AE%B8%E5%8F%AF%E8%AF%81
 
-[link-release]: https://github.com/Piracola/Helium_Portable/releases/latest
+[link-release]: https://github.com/TuringRiff/Helium_Portable/releases/latest
 [link-site]: https://piracola.github.io/ChromiumPortable/helium/
-[link-actions]: https://github.com/Piracola/Helium_Portable/actions/workflows/build.yml
-[link-license]: https://github.com/Piracola/Helium_Portable/blob/main/LICENSE
+[link-actions]: https://github.com/TuringRiff/Helium_Portable/actions/workflows/build.yml
+[link-license]: https://github.com/TuringRiff/Helium_Portable/blob/main/LICENSE
