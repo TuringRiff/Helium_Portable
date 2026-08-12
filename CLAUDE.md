@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Helium Portable — automated portable build of the [Helium](https://github.com/imputnet/helium) browser for Windows x64, bundled with Chrome++ portability features. The build pipeline runs on GitHub Actions, tracks both the latest stable release and the latest prerelease from `imputnet/helium-windows`, and publishes both portable 7z archives into the same GitHub Release keyed by the stable version.
+Helium Portable — automated portable build of the [Helium](https://github.com/imputnet/helium) browser for Windows x64, bundled with Chrome++ portability features. The build pipeline runs on GitHub Actions, tracks the latest stable release from `imputnet/helium-windows`, and publishes each new version as its own GitHub Release tagged `v{version}`.
 
 ## Local Build
 
@@ -13,7 +13,8 @@ python -m pip install requests
 $env:PYTHONPATH="..\ChromiumPortable"
 $env:HELIUM_EXTRACT_INNER="true"
 python -m portable_builder --config browser.json --target helium_stable --workdir . build
-python -m portable_builder --config browser.json --target helium_prerelease --workdir . build
+python -m portable_builder --config browser.json --target helium_stable --workdir . archive
+python -m portable_builder --config browser.json --target helium_stable --workdir . verify
 ```
 
 The `HELIUM_EXTRACT_INNER=true` env var is required — it triggers `helium_package.py` to download the upstream Helium zip, restructure it into a builder archive matching the expected `Helium-bin` version_root layout, and pass the local archive path to the builder instead of a direct download URL.
@@ -21,25 +22,24 @@ The `HELIUM_EXTRACT_INNER=true` env var is required — it triggers `helium_pack
 Other CLI commands (all need `$env:PYTHONPATH` and may need `$env:GITHUB_TOKEN`):
 
 ```powershell
-# Check if upstream has a newer stable or prerelease version
-python -m portable_builder --config browser.json --target helium_stable,helium_prerelease --workdir . check-targets
+# Check if upstream has a newer stable version
+python -m portable_builder --config browser.json --target helium_stable --workdir . check
 
-# Build and archive any updated targets
-python -m portable_builder --config browser.json --target helium_stable,helium_prerelease --workdir . build-targets
-
-# Verify the finished archives (extract, check the import table, launch the browser)
-python -m portable_builder --config browser.json --target helium_stable,helium_prerelease --workdir . verify-targets
-
-# Render release metadata for the shared release
-python -m portable_builder --config browser.json --target helium_stable,helium_prerelease --workdir . render-release-targets
+# Verify the finished archive (extract, check the import table, launch the browser)
+python -m portable_builder --config browser.json --target helium_stable --workdir . verify
 ```
 
-`verify-targets` skips targets whose `{PREFIX}_UPDATE` env var is `false`, so after a local single-target build use `verify` instead. It needs no `HELIUM_EXTRACT_INNER`.
+`verify` needs no `HELIUM_EXTRACT_INNER`.
+
+## Publishing
+
+Publishing is NOT done through the builder's `render-release` / `update-release` commands. Helium's package version differs from the bundled Chromium version the single-target builder treats as `{version}`, so `scripts/publish_release.py` renders the release metadata itself (using the Helium package version) and talks to the GitHub API directly. See the script docstring for details.
 
 ## Key Files
 
-- **`browser.json`** — Build target config. It defines `helium_stable` and `helium_prerelease`, both using the same packaging layout, and a shared top-level `release` section so one GitHub Release carries both assets. The stable target controls the release tag/title. Asset matching is intentionally inferred from each target's `archive_name`, so stable/preview cleanup stays isolated.
-- **`scripts/helium_package.py`** — The script provider. Queries `imputnet/helium-windows` releases, selects either the latest stable or latest prerelease based on `--channel`, finds the x64 zip asset, and either returns its URL or (with `--extract-inner` / `HELIUM_EXTRACT_INNER`) restructures the zip into a builder-compatible 7z archive. Key behavior: `chrome.exe` goes to `Helium-bin/chrome.exe`, everything else to `Helium-bin/<chromium_version>/...`. It refuses to emit a result unless the GitHub release asset carries a `digest`, verifies the downloaded zip against it, and reports a `sha256` for whatever it hands the builder (the repacked archive in extract-inner mode, the upstream digest otherwise).
+- **`browser.json`** — Build target config. Defines the single `helium_stable` target plus its per-target `release` section (tag `v{version}`, title, body, `version_pattern`). `archive_name` uses `{package_version}` on purpose: the builder's `archive` stage fills it from `PACKAGE_VERSION` (the Helium release version), while `{version}` would resolve to the bundled Chromium version directory name.
+- **`scripts/helium_package.py`** — The script provider. Queries `imputnet/helium-windows` releases, selects the latest stable release, finds the x64 zip asset, and either returns its URL or (with `--extract-inner` / `HELIUM_EXTRACT_INNER`) restructures the zip into a builder-compatible 7z archive. Key behavior: `chrome.exe` goes to `Helium-bin/chrome.exe`, everything else to `Helium-bin/<chromium_version>/...`. It refuses to emit a result unless the GitHub release asset carries a `digest`, verifies the downloaded zip against it, and reports a `sha256` for whatever it hands the builder (the repacked archive in extract-inner mode, the upstream digest otherwise).
+- **`scripts/publish_release.py`** — Creates one GitHub Release per Helium version (tag `v{version}`, non-prerelease). If the tag already exists it updates that release in place (replaces the archive asset, refreshes notes) instead of failing, which covers manual rebuilds. Reads `ARCHIVE_*` env vars left by the builder's `archive` stage; renders body placeholders and validates `version_pattern` round-trips.
 - **`chrome++/chrome++.override.ini`** — Only this browser's deviations from the shared baseline. Its command line disables the profile lock, points Helium's browser-only WinSparkle appcast at the reserved `updates.invalid` domain, and disables the default-browser check. The appcast override is required because upstream's updater silently launches a per-user installer under `%LOCALAPPDATA%\imput\Helium\Application`; it does not disable Chromium component updates. The builder merges core's `setdll/chrome++.ini` (upstream baseline) → `setdll/chrome++.defaults.ini` (project-wide defaults) → this file. The effective `data_dir` is `%app%\..\Data` from the baseline: `%app%` is chrome.exe's directory (`Helium/`), so the profile lands one level up, next to the `Helium` folder in the extracted archive. See *chrome++.ini layering* in the workspace `CLAUDE.md`.
 - **`chrome++/injectpe.bat`** — Manual DLL injection helper, unused by the automated build (which calls `setdll` directly). It still targets `helium.exe`, a name upstream no longer ships — the executable is `chrome.exe`.
 - **`开始.bat`** — Creates a desktop shortcut pointing to `Helium\chrome.exe`, with the WinSparkle appcast and default-browser protections repeated as defense in depth. Do not restore the old broad `--disable-background-networking` switch: it does not stop WinSparkle and may also suppress extension and component updates.
@@ -50,6 +50,6 @@ python -m portable_builder --config browser.json --target helium_stable,helium_p
 - The upstream zip from `imputnet/helium-windows` contains a single root directory with `chrome.exe` at root and versioned files beside it. `helium_package.py` restructures this into `Helium-bin/chrome.exe` + `Helium-bin/<version>/...` to match the builder's expected `version_root` layout.
 - The builder's `inject_dll` stage uses `setdll` to inject `version.dll` into `chrome.exe` with a portable relative path. Since `version_dll_location` is `app_root`, the DLL lands next to chrome.exe (not in the version subdirectory). Injection is asserted by parsing the PE import table and requiring `version.dll` to be the *first* import — Chromium natively imports the system `VERSION.dll`, so a weaker check would pass even with no injection at all.
 - `exe_name` is `..\\chrome.exe` (relative path from the version subdirectory back to the app root).
-- New GitHub Releases are still keyed to the stable version tag. If only the upstream prerelease changes, the workflow updates the existing latest release body and replaces only the preview asset.
-- When a new stable tag creates a new shared release but preview has not changed, the builder now carries forward the existing preview archive so the shared release keeps both assets.
-- Archive filenames and release metadata should use the Helium package version, while the internal `Helium-bin/<version>` directory continues to follow the bundled Chromium version required by the upstream layout.
+- Release tags/archive filenames use the Helium package version (e.g. `v0.15.4.1`, `Helium_0.15.4.1_2026-08-13.7z`), while the internal `Helium-bin/<version>` directory follows the bundled Chromium version required by the upstream layout.
+- Each new version gets a fresh release; the publish script never renames or merges an old release. The existing `v0.15.4.1` release predates this model and still carries both stable and preview assets; it is left as-is for history.
+- The `check` stage uses the builder's single-target `check`, which recovers the published version from the `/releases/latest` body via `version_pattern`. Keep the body's version line (and the pattern) in sync — a mismatch makes every scheduled run rebuild unconditionally.
