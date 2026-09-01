@@ -16,7 +16,8 @@ on:
     branches: [ main ]
     paths-ignore: [ "**.md", "LICENSE", ".gitignore", ".gitattributes" ]
   schedule:
-    - cron: "0 9 * * *"
+    # Runs twice a day: Beijing Time 11:30 & 21:30 (UTC 03:30 & 13:30)
+    - cron: "30 3,13 * * *"
 
 # ChromiumPortable publishes no releases and scripts/release.py imports its internals
 # (build_context, archive_name_regex, is_upgrade, ...), so tracking main would let an
